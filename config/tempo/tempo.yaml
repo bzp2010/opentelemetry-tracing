@@ -1,0 +1,59 @@
+server:
+  http_listen_port: 3200
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+
+ingester:
+  max_block_bytes: 1_000_000
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    compaction_window: 1h
+    block_retention: 1h
+    compacted_block_retention: 10m
+
+storage:
+  trace:
+    backend: local
+    block:
+      bloom_filter_false_positive: .05
+    wal:
+      path: /tmp/tempo/wal
+    local:
+      path: /tmp/tempo/blocks
+    pool:
+      max_workers: 100
+      queue_depth: 10000
+
+metrics_generator:
+  processor:
+    span_metrics:
+        dimensions:
+          - http.method
+          - http.target
+          - http.status_code
+          - service.version
+    service_graphs:
+        dimensions:
+          - http.method
+          - http.target
+          - http.status_code
+          - service.version
+  registry:
+    collection_interval: 5s
+#    external_labels:
+#      source: tempo                         # Add a `{source="tempo"}` label.
+#      group: 'mythical'                     # Add a `{group="mythical"}` label.
+  storage:
+    path: /tmp/tempo/generator/wal
+    remote_write:
+      - url: http://mimir:9009/api/v1/push  # URL of locally running Mimir instance.
+        send_exemplars: true                # Send exemplars along with their metrics.
+overrides:
+  metrics_generator_processors:
+    - span-metrics
+    - service-graphs

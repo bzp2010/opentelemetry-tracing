@@ -1,0 +1,29 @@
+upstreams:
+  - id: 2
+    nodes:
+      "catalog:8080": 1
+  - id: 3
+    nodes:
+      "pricing:5000": 1
+
+routes:
+  - id: catalog
+    uri: /products*
+    upstream_id: 2
+  - id: pricing
+    uri: /prices*
+    upstream_id: 3
+
+global_rules:
+  - id: 1
+    plugins:
+      opentelemetry:
+        sampler:
+          name: always_on
+        additional_attributes:
+          - route_name
+          - request_method
+          - uri
+          - http_x-otel-key
+      prometheus: ~
+#END

@@ -4,9 +4,13 @@ deployment:
     config_provider: yaml
 plugins:
   - opentelemetry
+  - prometheus
 plugin_attr:
   opentelemetry:
     resource:
       service.name: APISIX
     collector:
-      address: jaeger:4318
+      address: collector:4318
+  prometheus:
+    export_addr:
+      ip: "0.0.0.0"

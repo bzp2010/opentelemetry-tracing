@@ -1,17 +1,18 @@
 version: "3"
 
 services:
-  jaeger:
-    image: jaegertracing/all-in-one:1.47
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
   apisix:
     image: apache/apisix:3.4.0-debian
     volumes:
-      - ./apisix/config.yml:/usr/local/apisix/conf/config.yaml:ro
-      - ./apisix/apisix.yml:/usr/local/apisix/conf/apisix.yaml:ro
+      - ./config/apisix/config.yml:/usr/local/apisix/conf/config.yaml:ro
+      - ./config/apisix/apisix.yml:/usr/local/apisix/conf/apisix.yaml:ro
     ports:
       - "9080:9080"
+      - "9091:9091"
+    logging:
+      driver: loki
+      options:
+        loki-url: http://localhost:3100/loki/api/v1/push
     depends_on:
       - catalog
   catalog:
@@ -19,24 +20,68 @@ services:
     environment:
       APP_PRICING_ENDPOINT: http://apisix:9080/prices
       APP_STOCK_ENDPOINT: http://stock:3000/stocks
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_RESOURCE_ATTRIBUTES: service.name=catalog
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4317
       OTEL_METRICS_EXPORTER: none
-      OTEL_LOGS_EXPORTER: none
+      LOGGING_PATTERN_LEVEL: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+    logging:
+      driver: loki
+      options:
+        loki-url: http://localhost:3100/loki/api/v1/push
     depends_on:
       - pricing
       - stock
   pricing:
     image: otel-pricing:1.1
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_RESOURCE_ATTRIBUTES: service.name=pricing
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4317
       OTEL_METRICS_EXPORTER: none
-      OTEL_LOGS_EXPORTER: none
+    logging:
+      driver: loki
+      options:
+        loki-url: http://localhost:3100/loki/api/v1/push
   stock:
     image: otel-stock:1.0
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_RESOURCE_ATTRIBUTES: service.name=stock
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4317
       OTEL_METRICS_EXPORTER: none
-      OTEL_LOGS_EXPORTER: none
+    logging:
+      driver: loki
+      options:
+        loki-url: http://localhost:3100/loki/api/v1/push
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.80.0
+    volumes:
+      - ./config/otel/otel.yml:/etc/otel-collector-config.yml
+    command:
+      - --config=/etc/otel-collector-config.yml
+  grafana:
+    image: grafana/grafana:9.4.7
+    volumes:
+      - ./config/grafana/definitions:/var/lib/grafana/dashboards
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_FEATURE_TOGGLES_ENABLE=flameGraph topnav
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+  tempo:
+    image: grafana/tempo:2.0.1
+    command:
+      - -config.file=/etc/tempo.yaml
+    volumes:
+      - ./config/tempo/tempo.yaml:/etc/tempo.yaml
+  loki:
+    image: grafana/loki:2.8.0
+    ports:
+      - "3100:3100"
+  mimir:
+    image: grafana/mimir:2.7.1
+    command:
+      - -config.file=/etc/mimir.yaml
+    volumes:
+      - ./config/mimir/mimir.yaml:/etc/mimir.yaml
