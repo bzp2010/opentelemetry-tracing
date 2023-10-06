@@ -38,3 +38,4 @@ __pycache__
 requirements.txt
 *.sqlite
 node_modules
+dist
